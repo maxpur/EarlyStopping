@@ -1,43 +1,54 @@
-import torch
 import numpy as np
 
-
+# Python class to evaluate your training result of a neural network and to avoid overfitting
 class EarlyStopping:
-    def __init__(self, lookback, tolerance, path):
+    # Initialize data
+    def __init__(self, lookback, deg):
         self.states = list()
         self.train_losses = list()
         self.val_losses = list()
         self.lookback = lookback
-        self.tolerance = tolerance
-        self.path = path
+        self.deg = deg
+        self.final_model = None
 
-    def early_stop(self, val_loss, train_loss, model):
+    # Check if overfitting is happening and safe best model state
+    # Return True if overfitting started
+    def early_stop(self, val_loss, train_loss, model_state):
+        # Log current losses 
         self.train_losses.append(train_loss)
         self.val_losses.append(val_loss)
 
-        if self.check_sequence(self.val_losses) and self.check_sequence(self.train_losses):
-            self.states.append(model)
+        # Define array that will be used to calculate the increasing/decreasing tendency of the data
+        train_loss_window = self.train_losses[:-min(self.lookback, len(self.train_losses))]
+        val_loss_window = self.val_losses[:-min(self.lookback, len(self.val_losses))]
+
+        # Check if overfitting starts
+        if self.is_decreasing(train_loss_window) and self.is_increasing(val_loss_window):
+            # Overfitting starts
+            min_id = self.val_losses.index(min(self.val_losses))
+            self.final_model = self.states[min_id]
             return True
         else:
-            id = self.train_losses.index(min(self.train_losses))
-            torch.save(self.states[id], self.path)   
-            return False  
+            # Model performance is still increasing
+            self.states.append(model_state)
+            return False
 
-    def check_sequence(self, data):
-        current = data[- min(self.lookback, len(self.val_losses)):]
-        return self.check_tendency(current) and self.check_tolerance(current)
-            
-    def check_tolerance(self, data):
-        tmp = data[0]
-        for value in data:
-            if abs(tmp - value) > self.tolerance:
-                return False
-            tmp = value
-        return True
+    # Calculate slope of interpolated data with a range defined in lookback
+    # Return slope
+    def get_slope(self, data):
+        indices = [range(1, len(data) + 1)]
+        return np.polyfit(indices, data, self.deg)[-2]
+
+    # Check if slope is increasing
+    # Return True if slope is increasing
+    def is_increasing(self, data):
+        return self.get_slope(data) > 0
+
+    # Check if slope is decreasing
+    # Return True if slope is decreasing
+    def is_decreasing(self, data):
+        return self.get_slope(data) < 0
     
-    def check_tendency(self, data):
-        return np.polyfit(range(1,len(data) + 1), data, 1)[-2] < 0
-    
-# TODO: Only return false if training error continues to decrease and validation error start to increase
-# TODO: Search minimum in the subarray [:len(array) - 1]
+
+        
 
